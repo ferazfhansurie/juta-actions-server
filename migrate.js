@@ -17,7 +17,7 @@ const DatabaseMigrator = require('./database/migrator');
 const command = process.argv[2] || 'up';
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_stgYmUDC4q2r@ep-billowing-resonance-a1buwet1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+  const databaseUrl = process.env.DATABASE_URL ;
   
   const migrator = new DatabaseMigrator(databaseUrl);
 

@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 
 // Database connection
 const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_stgYmUDC4q2r@ep-billowing-resonance-a1buwet1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+  connectionString: process.env.DATABASE_URL
 });
 
 // Table mappings for different item types

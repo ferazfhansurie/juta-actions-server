@@ -38,7 +38,7 @@ class AIActionsServer {
 
     // Database connection
     this.db = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_stgYmUDC4q2r@ep-billowing-resonance-a1buwet1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+      connectionString: process.env.DATABASE_URL
     });
 
     // Initialize internal items manager
@@ -56,7 +56,7 @@ class AIActionsServer {
       // Run migrations
       try {
         console.log('🔄 Running database migrations...');
-        const migrator = new DatabaseMigrator(process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_stgYmUDC4q2r@ep-billowing-resonance-a1buwet1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require');
+        const migrator = new DatabaseMigrator(process.env.DATABASE_URL);
         await migrator.runMigrations();
         await migrator.close();
         console.log('✅ Database migrations completed');

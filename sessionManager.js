@@ -10,7 +10,7 @@ class SessionManager {
     
     // Database connection - initialize first
     this.db = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_stgYmUDC4q2r@ep-billowing-resonance-a1buwet1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+      connectionString: process.env.DATABASE_URL
     });
     
     // Initialize processors with database connection
