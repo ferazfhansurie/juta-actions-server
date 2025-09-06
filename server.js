@@ -25,7 +25,7 @@ class AIActionsServer {
     this.server = http.createServer(this.app);
     this.io = new Server(this.server, {
       cors: {
-        origin: "http://localhost:3001",
+        origin: "http://localhost:3002",
         methods: ["GET", "POST"]
       }
     });
@@ -1250,13 +1250,16 @@ class AIActionsServer {
         if (results && results.length > 0) {
           for (const actionResult of results) {
             try {
+              // Generate actionId if not present
+              const actionId = actionResult.actionId || `brain_dump_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+              
               // Store action in database
               const actionRecord = await this.db.query(
                 `INSERT INTO ai_actions (action_id, type, description, status, original_message, details, user_id, created_at) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
                  RETURNING *`,
                 [
-                  actionResult.actionId,
+                  actionId,
                   actionResult.type,
                   actionResult.description,
                   'pending',
@@ -1282,7 +1285,7 @@ class AIActionsServer {
 
         // Always create the note in internal_notes
         const noteRecord = await this.internalItemsCRUD.createItem('note', authenticatedUserId, {
-          actionId: null, // No specific action ID for brain dump notes
+          action_id: null, // No specific action ID for brain dump notes
           title: title || content.split('\n')[0]?.slice(0, 50) || 'Brain Dump Note',
           content: content,
           priority: 'medium',
