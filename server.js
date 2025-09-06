@@ -69,18 +69,39 @@ class AIActionsServer {
       console.error('Failed to initialize database:', error);
     });
     
-    // Preset phone numbers that are allowed to login
-    this.authorizedPhoneNumbers = [
-      '+601121677522',
-      '+601121677672',
-      '+60126268707',
-    ];
+    // Cache for authorized phone numbers
+    this.authorizedPhoneNumbers = new Set();
+  }
+
+  // Load authorized phone numbers from database
+  async loadAuthorizedPhoneNumbers() {
+    try {
+      const result = await this.db.query(
+        'SELECT phone_number FROM authorized_phone_numbers WHERE is_active = true'
+      );
+      
+      this.authorizedPhoneNumbers.clear();
+      result.rows.forEach(row => {
+        this.authorizedPhoneNumbers.add(row.phone_number);
+      });
+      
+      console.log(`✅ Loaded ${this.authorizedPhoneNumbers.size} authorized phone numbers from database`);
+      return this.authorizedPhoneNumbers;
+    } catch (error) {
+      console.error('❌ Error loading authorized phone numbers:', error);
+      // Fallback to empty set if database query fails
+      this.authorizedPhoneNumbers.clear();
+      throw new Error('Failed to load authorized phone numbers');
+    }
   }
 
   // Authentication methods
   async login(phoneNumber) {
+    // Refresh authorized phone numbers from database
+    await this.loadAuthorizedPhoneNumbers();
+    
     // Check if phone number is authorized
-    if (!this.authorizedPhoneNumbers.includes(phoneNumber)) {
+    if (!this.authorizedPhoneNumbers.has(phoneNumber)) {
       throw new Error('This phone number is not authorized to access the system');
     }
 
@@ -324,6 +345,18 @@ class AIActionsServer {
     this.app.use(cors());
     this.app.use(express.json());
     
+    // Get authorized phone numbers (for frontend validation)
+    this.app.get('/api/auth/authorized-numbers', async (req, res) => {
+      try {
+        await this.loadAuthorizedPhoneNumbers();
+        const phoneNumbers = Array.from(this.authorizedPhoneNumbers);
+        res.json({ success: true, phoneNumbers });
+      } catch (error) {
+        console.error('Error getting authorized phone numbers:', error);
+        res.status(500).json({ success: false, error: 'Failed to get authorized phone numbers' });
+      }
+    });
+
     // Authentication routes
     this.app.post('/api/auth/login', async (req, res) => {
       try {
