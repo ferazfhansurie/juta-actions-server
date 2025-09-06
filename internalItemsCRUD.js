@@ -120,23 +120,20 @@ class InternalItemsCRUD {
     try {
       const tableName = this.getTableName(type);
       
-      // Add common fields
+      // Prepare data without timestamp fields first
       const data = {
         user_id: userId,
-        created_at: 'CURRENT_TIMESTAMP',
-        updated_at: 'CURRENT_TIMESTAMP',
         ...itemData
       };
 
       // Build dynamic insert query
       const fields = Object.keys(data);
       const values = Object.values(data);
-      const placeholders = fields.map((field, index) => 
-        field.endsWith('_at') ? 'CURRENT_TIMESTAMP' : `$${index + 1}`
-      );
+      const placeholders = fields.map((_, index) => `$${index + 1}`);
 
-      // Filter out timestamp fields from values
-      const filteredValues = values.filter((_, index) => !fields[index].endsWith('_at'));
+      // Add timestamp fields to the query
+      fields.push('created_at', 'updated_at');
+      placeholders.push('CURRENT_TIMESTAMP', 'CURRENT_TIMESTAMP');
 
       const query = `
         INSERT INTO ${tableName} (${fields.join(', ')})
@@ -144,7 +141,7 @@ class InternalItemsCRUD {
         RETURNING *
       `;
 
-      const result = await this.db.query(query, filteredValues);
+      const result = await this.db.query(query, values);
       return result.rows[0] || null;
     } catch (error) {
       console.error(`Error creating ${type} item:`, error);
