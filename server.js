@@ -1156,6 +1156,125 @@ class AIActionsServer {
       }
     });
 
+    // Process note with AI analysis (like WhatsApp messages)
+    this.app.post('/api/process-note', async (req, res) => {
+      try {
+        const { userId, content, title } = req.body;
+        
+        const authHeader = req.headers.authorization;
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).json({ message: 'No token provided' });
+        }
+        
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const authenticatedUserId = decoded.userId;
+        
+        if (!content || !content.trim()) {
+          return res.status(400).json({ success: false, error: 'Content is required' });
+        }
+
+        // Create a fake message structure like WhatsApp messages
+        const fakeMessageData = {
+          id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          from: 'brain_dump',
+          fromName: 'Brain Dump',
+          chatName: 'Notes',
+          body: content.trim(),
+          timestamp: Date.now(),
+          type: 'text',
+          isGroup: false,
+          fromMe: true, // Mark as from user (like outgoing WhatsApp message)
+          userId: authenticatedUserId
+        };
+
+        console.log(`Processing brain dump note from user ${authenticatedUserId}: "${content.substring(0, 100)}..."`);
+
+        // Process through AI like a WhatsApp message
+        const AIProcessor = require('./aiProcessor');
+        const aiProcessor = new AIProcessor();
+        
+        // Get recent conversation history for context
+        const recentActions = await this.db.query(
+          'SELECT * FROM ai_actions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
+          [authenticatedUserId]
+        );
+        
+        const conversationHistory = recentActions.rows;
+        const duplicateSignatures = new Set();
+        
+        // Process with AI
+        const results = await aiProcessor.processMessageWithHistory(
+          fakeMessageData, 
+          conversationHistory, 
+          duplicateSignatures
+        );
+
+        let createdActions = [];
+
+        // If actions were detected, create them
+        if (results && results.length > 0) {
+          for (const actionResult of results) {
+            try {
+              // Store action in database
+              const actionRecord = await this.db.query(
+                `INSERT INTO ai_actions (action_id, type, description, status, original_message, details, user_id, created_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+                 RETURNING *`,
+                [
+                  actionResult.actionId,
+                  actionResult.type,
+                  actionResult.description,
+                  'pending',
+                  JSON.stringify(fakeMessageData),
+                  JSON.stringify(actionResult.details || {}),
+                  authenticatedUserId
+                ]
+              );
+
+              createdActions.push(actionRecord.rows[0]);
+              console.log(`✅ AI Action created from brain dump: ${actionResult.type} - ${actionResult.description}`);
+              
+              // Emit to frontend
+              if (this.userSockets.has(authenticatedUserId)) {
+                this.userSockets.get(authenticatedUserId).emit('newAction', actionRecord.rows[0]);
+              }
+            } catch (actionError) {
+              console.error('Error creating action from brain dump:', actionError.message);
+              // Continue processing other actions even if one fails
+            }
+          }
+        }
+
+        // Always create the note in internal_notes
+        const noteRecord = await this.internalItemsCRUD.createItem('note', authenticatedUserId, {
+          actionId: null, // No specific action ID for brain dump notes
+          title: title || content.split('\n')[0]?.slice(0, 50) || 'Brain Dump Note',
+          content: content,
+          priority: 'medium',
+          status: 'active',
+          note_type: 'brain_dump',
+          created_from: 'notes_app'
+        });
+
+        console.log(`✅ Brain dump note saved: "${noteRecord.title}"`);
+
+        res.json({
+          success: true,
+          note: noteRecord,
+          actions: createdActions,
+          message: createdActions.length > 0 
+            ? `AI detected ${createdActions.length} action(s) from your brain dump!` 
+            : 'Note saved to your brain dump. No actions detected.'
+        });
+
+      } catch (error) {
+        console.error('Error processing brain dump note:', error);
+        res.status(500).json({ success: false, error: 'Failed to process note' });
+      }
+    });
+
     // Include Internal Items API routes
     const internalItemsAPI = require('./internalItemsAPI');
     this.app.use('/api/internal-items', internalItemsAPI);
