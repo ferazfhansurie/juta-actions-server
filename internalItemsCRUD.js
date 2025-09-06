@@ -116,6 +116,42 @@ class InternalItemsCRUD {
     }
   }
 
+  async createItem(type, userId, itemData) {
+    try {
+      const tableName = this.getTableName(type);
+      
+      // Add common fields
+      const data = {
+        user_id: userId,
+        created_at: 'CURRENT_TIMESTAMP',
+        updated_at: 'CURRENT_TIMESTAMP',
+        ...itemData
+      };
+
+      // Build dynamic insert query
+      const fields = Object.keys(data);
+      const values = Object.values(data);
+      const placeholders = fields.map((field, index) => 
+        field.endsWith('_at') ? 'CURRENT_TIMESTAMP' : `$${index + 1}`
+      );
+
+      // Filter out timestamp fields from values
+      const filteredValues = values.filter((_, index) => !fields[index].endsWith('_at'));
+
+      const query = `
+        INSERT INTO ${tableName} (${fields.join(', ')})
+        VALUES (${placeholders.join(', ')})
+        RETURNING *
+      `;
+
+      const result = await this.db.query(query, filteredValues);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error(`Error creating ${type} item:`, error);
+      throw error;
+    }
+  }
+
   async deleteItem(type, itemId, userId) {
     try {
       const tableName = this.getTableName(type);
