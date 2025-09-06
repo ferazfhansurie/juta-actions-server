@@ -249,10 +249,13 @@ class SessionManager {
         } catch (error) {
           console.warn(`Could not get contact/chat for incoming message: ${error.message}`);
           // Create fallback objects
+          const phoneNumber = message.from || message.author || 'unknown';
+          const isFromMe = message.fromMe;
+          
           contact = {
-            number: message.from || message.author || 'unknown',
-            name: 'Unknown Contact',
-            pushname: 'Unknown'
+            number: phoneNumber,
+            name: isFromMe ? 'You' : phoneNumber.replace('@c.us', ''),
+            pushname: isFromMe ? 'You' : phoneNumber.replace('@c.us', '')
           };
           if (!chat) {
             chat = {
@@ -265,7 +268,7 @@ class SessionManager {
         const messageData = {
           id: message.id?._serialized || `fallback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           from: contact?.number || message.from || message.author || 'unknown',
-          fromName: contact?.name || contact?.pushname || 'Unknown Contact',
+          fromName: this.getDisplayName(contact, message),
           chatName: chat?.name || 'Unknown Chat',
           body: message.body || '',
           timestamp: message.timestamp || Date.now(),
@@ -384,7 +387,7 @@ class SessionManager {
         const messageData = {
           id: message.id?._serialized || `fallback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           from: contact?.number || message.from || message.author || 'unknown',
-          fromName: contact?.name || contact?.pushname || 'Unknown Contact',
+          fromName: this.getDisplayName(contact, message),
           chatName: chat?.name || 'Unknown Chat',
           body: message.body || '',
           timestamp: message.timestamp || Date.now(),
@@ -540,6 +543,23 @@ class SessionManager {
     }
 
     return inactiveSessions.length;
+  }
+
+  getDisplayName(contact, message) {
+    // Try to get a proper display name
+    let displayName = contact?.name || contact?.pushname;
+    
+    if (!displayName || displayName === 'Unknown Contact' || displayName === 'Unknown') {
+      if (message.fromMe) {
+        displayName = 'You';
+      } else {
+        // Clean up the phone number for display
+        const phoneNumber = contact?.number || message.from || message.author || 'unknown';
+        displayName = phoneNumber.replace('@c.us', '');
+      }
+    }
+    
+    return displayName;
   }
 
   setSocketIO(io, userSockets) {
