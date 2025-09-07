@@ -322,13 +322,19 @@ class AIActionsServer {
 
       const playerId = userResult.rows[0].onesignal_player_id;
       
-      // Validate UUID format for OneSignal player ID
+      // Validate OneSignal player ID format (UUID) or device token format (hex string)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(playerId)) {
+      const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
+      
+      if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
         console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
-        console.log(`📱 This appears to be a device token fallback - using fallback notification system`);
-        await this.sendFallbackNotification(action, userId, `Device token fallback: ${playerId}`);
+        console.log(`📱 Expected UUID or 64-char hex device token format`);
+        await this.sendFallbackNotification(action, userId, `Invalid player ID format: ${playerId}`);
         return;
+      }
+      
+      if (deviceTokenRegex.test(playerId)) {
+        console.log(`📱 Using device token for OneSignal notification for user ${userId}: ${playerId.substring(0, 16)}...`);
       }
       
       const notification = {
@@ -633,13 +639,15 @@ class AIActionsServer {
           return res.status(400).json({ success: false, error: 'Player ID is required' });
         }
 
-        // Validate UUID format for OneSignal player ID
+        // Validate OneSignal player ID format (UUID) or device token format (hex string)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(playerId)) {
+        const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
+        
+        if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
           console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
           return res.status(400).json({ 
             success: false, 
-            error: 'Invalid player ID format. OneSignal player ID must be a valid UUID.' 
+            error: 'Invalid player ID format. OneSignal player ID must be a valid UUID or 64-character hex device token.' 
           });
         }
 
