@@ -82,6 +82,7 @@ Thumbs.db
 # WhatsApp session data
 .wwebjs_auth/
 .wwebjs_cache/
+wwebjs_auth/
 
 # Build outputs
 dist/

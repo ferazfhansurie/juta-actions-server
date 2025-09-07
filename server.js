@@ -129,6 +129,7 @@ class AIActionsServer {
       success: true,
       token,
       user: {
+        id: user.id,
         phoneNumber: user.phone_number,
         name: user.name,
         isVerified: true
@@ -175,6 +176,7 @@ class AIActionsServer {
 
       return {
         user: {
+          id: user.rows[0].id,
           phoneNumber: user.rows[0].phone_number,
           name: user.rows[0].name,
           isVerified: true
