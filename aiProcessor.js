@@ -171,8 +171,16 @@ If no actionable content found, return empty array [].
       const response = completion.choices[0].message.content.trim();
       console.log(`AI Processor: Raw response: ${response}`);
       
+      // Strip markdown code blocks if present
+      let jsonResponse = response;
+      if (response.startsWith('```json') && response.endsWith('```')) {
+        jsonResponse = response.slice(7, -3).trim();
+      } else if (response.startsWith('```') && response.endsWith('```')) {
+        jsonResponse = response.slice(3, -3).trim();
+      }
+      
       try {
-        const actions = JSON.parse(response);
+        const actions = JSON.parse(jsonResponse);
         console.log(`AI Processor: Parsed ${actions.length} actions`);
         
         // Filter actions by confidence threshold and return only the best one
