@@ -67,7 +67,7 @@ class AIActionsServer {
       
       this.initializeExistingSessions();
     }).catch(error => {
-      console.error('Failed to initialize database:', error);
+      console.error('Error initializing database:', error);
     });
     
     // Cache for authorized phone numbers
@@ -1496,15 +1496,17 @@ class AIActionsServer {
       }
     }
     
-    if (this.db) {
+    if (this.server && this.server.listening) {
+      this.server.close();
+    }
+    
+    // Only close database connection if we're actually shutting down
+    if (this.db && !this.db.ended) {
       try {
         await this.db.end();
       } catch (error) {
         console.error('Error closing database connection:', error);
       }
-    }
-    if (this.server && this.server.listening) {
-      this.server.close();
     }
   }
 
@@ -1516,7 +1518,7 @@ class AIActionsServer {
         this.start(port + 1);
       } else {
         console.error('Server error:', error);
-        await this.cleanup();
+        // Don't cleanup on server errors, just exit
         process.exit(1);
       }
     });
@@ -1541,15 +1543,15 @@ class AIActionsServer {
     process.on('uncaughtException', async (error) => {
       if (error.code === 'EADDRINUSE') {
         console.log('Port conflict detected, cleaning up...');
+        await this.cleanup();
       } else {
         console.error('Uncaught Exception:', error);
+        // For other uncaught exceptions, don't cleanup to avoid further issues
       }
-      await this.cleanup();
       process.exit(1);
     });
   }
 }
 
 const server = new AIActionsServer();
-server.start();
 server.start();
