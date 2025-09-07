@@ -166,7 +166,7 @@ class SessionManager {
     const { client, userId } = sessionData;
 
     client.on('qr', (qr) => {
-      console.log(`QR Code received for user ${userId}`);
+     // console.log(`QR Code received for user ${userId}`);
       sessionData.currentQRCode = qr;
       
       // Emit status update
@@ -180,7 +180,7 @@ class SessionManager {
       this.emitToUser(userId, 'qrCode', qr);
       
       // Also display in terminal for development
-      qrcode.generate(qr, { small: true });
+     // qrcode.generate(qr, { small: true });
     });
 
     client.on('ready', () => {
