@@ -316,10 +316,20 @@ class AIActionsServer {
 
       if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
         console.log(`No OneSignal player ID found for user ${userId}`);
+        await this.sendFallbackNotification(action, userId, 'No OneSignal player ID registered');
         return;
       }
 
       const playerId = userResult.rows[0].onesignal_player_id;
+      
+      // Validate UUID format for OneSignal player ID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(playerId)) {
+        console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
+        console.log(`📱 This appears to be a device token fallback - using fallback notification system`);
+        await this.sendFallbackNotification(action, userId, `Device token fallback: ${playerId}`);
+        return;
+      }
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
@@ -341,7 +351,52 @@ class AIActionsServer {
       const response = await this.oneSignalClient.createNotification(notification);
       console.log(`✅ OneSignal notification sent for action ${action.action_id}:`, response);
     } catch (error) {
-      console.error(`❌ Failed to send OneSignal notification for action ${action.action_id}:`, error);
+      // Enhanced error logging with more specific information
+      if (error.statusCode === 400) {
+        console.error(`❌ OneSignal API validation error for action ${action.action_id}:`, error.body);
+        console.error(`   Player ID: ${playerId}`);
+        console.error(`   User ID: ${userId}`);
+      } else if (error.statusCode === 401) {
+        console.error(`❌ OneSignal API authentication error for action ${action.action_id}: Check API key`);
+      } else if (error.statusCode === 429) {
+        console.error(`❌ OneSignal API rate limit exceeded for action ${action.action_id}`);
+      } else {
+        console.error(`❌ OneSignal API error for action ${action.action_id}:`, error.message || error);
+      }
+      
+      // Send fallback notification when OneSignal fails
+      await this.sendFallbackNotification(action, userId, `OneSignal error: ${error.message || error}`);
+    }
+  }
+
+  // Send fallback notification when OneSignal fails
+  async sendFallbackNotification(action, userId, reason) {
+    try {
+      console.log(`📱 Sending fallback notification for action ${action.action_id} to user ${userId}`);
+      console.log(`📱 Reason: ${reason}`);
+      
+      // Store notification in database for later retrieval
+      await this.db.query(
+        'INSERT INTO notification_logs (user_id, action_id, notification_type, status, reason, created_at) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)',
+        [userId, action.action_id, 'fallback', 'pending', reason]
+      );
+      
+      // If user has an active socket connection, send real-time notification
+      if (this.userSockets.has(userId)) {
+        this.userSockets.get(userId).emit('newActionNotification', {
+          actionId: action.action_id,
+          type: action.type,
+          description: action.description,
+          fallback: true,
+          reason: reason
+        });
+        console.log(`📱 Fallback notification sent via socket to user ${userId}`);
+      } else {
+        console.log(`📱 User ${userId} not connected via socket, notification logged for later retrieval`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to send fallback notification for action ${action.action_id}:`, error);
     }
   }
 
@@ -370,6 +425,25 @@ class AIActionsServer {
         console.log('Added missing columns to users table');
       } catch (error) {
         console.log('Columns already exist or error adding them:', error.message);
+      }
+
+      // Create notification_logs table for fallback notifications
+      try {
+        await this.db.query(`
+          CREATE TABLE IF NOT EXISTS notification_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            action_id VARCHAR(255) NOT NULL,
+            notification_type VARCHAR(50) NOT NULL,
+            status VARCHAR(50) NOT NULL,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+          )
+        `);
+        console.log('Created notification_logs table');
+      } catch (error) {
+        console.log('notification_logs table already exists or error creating it:', error.message);
       }
 
       // Add your phone number to the database
@@ -557,6 +631,16 @@ class AIActionsServer {
         
         if (!playerId) {
           return res.status(400).json({ success: false, error: 'Player ID is required' });
+        }
+
+        // Validate UUID format for OneSignal player ID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(playerId)) {
+          console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Invalid player ID format. OneSignal player ID must be a valid UUID.' 
+          });
         }
 
         // Update user's OneSignal player ID
