@@ -1607,8 +1607,8 @@ class AIActionsServer {
   start(port = 3002) {
     this.server.on('error', async (error) => {
       if (error.code === 'EADDRINUSE') {
-        console.log(`Port ${port} is busy, trying port ${port + 1}`);
-        this.start(port + 1);
+        console.error(`Port ${port} is already in use. Please kill the existing process or use a different port.`);
+        process.exit(1);
       } else {
         console.error('Server error:', error);
         // Don't cleanup on server errors, just exit
