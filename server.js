@@ -322,20 +322,17 @@ class AIActionsServer {
 
       const playerId = userResult.rows[0].onesignal_player_id;
       
-      // Validate OneSignal player ID format (UUID) or device token format (hex string)
+      // Validate OneSignal push subscription ID format (UUID only - device tokens are deprecated)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
       
-      if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
-        console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
-        console.log(`📱 Expected UUID or 64-char hex device token format`);
-        await this.sendFallbackNotification(action, userId, `Invalid player ID format: ${playerId}`);
+      if (!uuidRegex.test(playerId)) {
+        console.log(`❌ Invalid OneSignal push subscription ID format for user ${userId}: ${playerId}`);
+        console.log(`📱 Expected UUID format for push subscription ID`);
+        await this.sendFallbackNotification(action, userId, `Invalid push subscription ID format: ${playerId}`);
         return;
       }
       
-      if (deviceTokenRegex.test(playerId)) {
-        console.log(`📱 Using device token for OneSignal notification for user ${userId}: ${playerId.substring(0, 16)}...`);
-      }
+      console.log(`📱 Using push subscription ID for OneSignal notification for user ${userId}: ${playerId}`);
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
@@ -639,30 +636,29 @@ class AIActionsServer {
           return res.status(400).json({ success: false, error: 'Player ID is required' });
         }
 
-        // Validate OneSignal player ID format (UUID) or device token format (hex string)
+        // Validate OneSignal push subscription ID format (UUID only - device tokens are deprecated)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
         
-        if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
-          console.log(`❌ Invalid OneSignal player ID format for user ${userId}: ${playerId}`);
+        if (!uuidRegex.test(playerId)) {
+          console.log(`❌ Invalid OneSignal push subscription ID format for user ${userId}: ${playerId}`);
           return res.status(400).json({ 
             success: false, 
-            error: 'Invalid player ID format. OneSignal player ID must be a valid UUID or 64-character hex device token.' 
+            error: 'Invalid push subscription ID format. OneSignal push subscription ID must be a valid UUID format.' 
           });
         }
 
-        // Update user's OneSignal player ID
+        // Update user's OneSignal push subscription ID
         await this.db.query(
           'UPDATE users SET onesignal_player_id = $1 WHERE id = $2',
           [playerId, userId]
         );
 
-        console.log(`✅ OneSignal player ID registered for user ${userId}: ${playerId}`);
+        console.log(`✅ OneSignal push subscription ID registered for user ${userId}: ${playerId}`);
         
-        res.json({ success: true, message: 'OneSignal player ID registered successfully' });
+        res.json({ success: true, message: 'OneSignal push subscription ID registered successfully' });
       } catch (error) {
-        console.error('Error registering OneSignal player ID:', error);
-        res.status(500).json({ success: false, error: 'Failed to register OneSignal player ID' });
+        console.error('Error registering OneSignal push subscription ID:', error);
+        res.status(500).json({ success: false, error: 'Failed to register OneSignal push subscription ID' });
       }
     });
 
