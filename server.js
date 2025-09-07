@@ -255,18 +255,46 @@ class AIActionsServer {
   }
 
   deduplicateActions(actions) {
-    // Group actions by type and select the highest confidence one
-    const actionMap = new Map();
+    if (!actions || actions.length === 0) {
+      return [];
+    }
+
+    // Create a more sophisticated deduplication based on content similarity
+    const deduplicatedActions = [];
+    const seenSignatures = new Set();
     
     for (const action of actions) {
-      const existingAction = actionMap.get(action.type);
+      // Create a signature based on type, description, and original message content
+      const originalMessage = typeof action.original_message === 'string' 
+        ? JSON.parse(action.original_message) 
+        : action.original_message;
       
-      if (!existingAction || action.confidence > existingAction.confidence) {
-        actionMap.set(action.type, action);
+      const signature = this.createActionSignature({
+        type: action.type,
+        description: action.description,
+        originalMessage: originalMessage
+      });
+      
+      // Check if we've seen this signature before
+      if (!seenSignatures.has(signature)) {
+        seenSignatures.add(signature);
+        deduplicatedActions.push(action);
+      } else {
+        console.log(`Duplicate action filtered: ${action.type} - ${action.description}`);
       }
     }
     
-    return Array.from(actionMap.values());
+    console.log(`Deduplicated ${actions.length} actions to ${deduplicatedActions.length} unique actions`);
+    return deduplicatedActions;
+  }
+
+  createActionSignature(action) {
+    // Create a normalized signature for duplicate detection
+    const normalizedDescription = action.description.toLowerCase().trim();
+    const messageBody = action.originalMessage?.body?.toLowerCase().trim() || '';
+    
+    // Combine type, normalized description, and message body for signature
+    return `${action.type}:${normalizedDescription}:${messageBody}`;
   }
 
   async initializeDatabase() {
@@ -448,7 +476,11 @@ class AIActionsServer {
           'SELECT * FROM ai_actions WHERE status = $1 AND user_id = $2 ORDER BY created_at DESC',
           ['pending', userId]
         );
-        res.json({ success: true, actions: result.rows });
+        
+        // Deduplicate actions before sending to frontend
+        const deduplicatedActions = this.deduplicateActions(result.rows);
+        
+        res.json({ success: true, actions: deduplicatedActions });
       } catch (error) {
         console.error('Error fetching actions:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch actions' });
@@ -1394,7 +1426,10 @@ class AIActionsServer {
           ['pending', userId]
         );
         
-        for (const action of result.rows) {
+        // Deduplicate actions before sending to frontend
+        const deduplicatedActions = this.deduplicateActions(result.rows);
+        
+        for (const action of deduplicatedActions) {
           let originalMessage;
           try {
             // Handle both JSON string and object cases
@@ -1516,4 +1551,5 @@ class AIActionsServer {
 }
 
 const server = new AIActionsServer();
+server.start();
 server.start();
