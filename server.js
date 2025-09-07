@@ -51,7 +51,7 @@ class AIActionsServer {
     // Initialize OneSignal
     this.oneSignalClient = new OneSignal.Client(
       process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-      process.env.ONESIGNAL_API_KEY || 'YOUR_ONESIGNAL_API_KEY'
+      process.env.ONESIGNAL_API_KEY || 'os_v2_app_gaovxejqkvfthczusaxiqutx6fip7opmbg2u4wv65o55a5utwahrk5tveqxrvsq5vjmnklxwhzx255qng56pdha2iuw544yb3bdhzcq'
     );
 
     this.setupExpress();
@@ -308,41 +308,15 @@ class AIActionsServer {
   // Send OneSignal notification for new action
   async sendActionNotification(action, userId) {
     try {
-      // Get user's OneSignal player ID from database
-      const userResult = await this.db.query(
-        'SELECT onesignal_player_id FROM users WHERE id = $1',
-        [userId]
-      );
-
-      if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
-        console.log(`No OneSignal player ID found for user ${userId}`);
-        await this.sendFallbackNotification(action, userId, 'No OneSignal player ID registered');
-        return;
-      }
-
-      const playerId = userResult.rows[0].onesignal_player_id;
+      // Use company-based targeting instead of individual player IDs
+      // This matches how juta_app works - target all users in the company
+      const companyId = 'juta_actions_company';
       
-      // Validate OneSignal ID format (UUID preferred, device tokens temporarily allowed)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
-      
-      if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
-        console.log(`❌ Invalid OneSignal ID format for user ${userId}: ${playerId}`);
-        console.log(`📱 Expected UUID format for push subscription ID or 64-char hex device token`);
-        await this.sendFallbackNotification(action, userId, `Invalid OneSignal ID format: ${playerId}`);
-        return;
-      }
-      
-      if (uuidRegex.test(playerId)) {
-        console.log(`📱 Using push subscription ID for OneSignal notification for user ${userId}: ${playerId}`);
-      } else if (deviceTokenRegex.test(playerId)) {
-        console.log(`⚠️ TEMPORARY: Using device token for OneSignal notification for user ${userId} (this will fail)`);
-        console.log(`⚠️ Device token: ${playerId.substring(0, 16)}...`);
-      }
+      console.log(`📱 Sending OneSignal notification to company: ${companyId} for action ${action.action_id}`);
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-        include_player_ids: [playerId],
+        include_external_user_ids: [companyId], // Target by external user ID (company ID)
         headings: {
           en: '🎯 New Action Created!'
         },
@@ -352,7 +326,8 @@ class AIActionsServer {
         data: {
           actionId: action.action_id,
           actionType: action.type,
-          userId: userId
+          userId: userId,
+          companyId: companyId
         },
         url: 'juta-actions://action/' + action.action_id
       };
@@ -363,7 +338,7 @@ class AIActionsServer {
       // Enhanced error logging with more specific information
       if (error.statusCode === 400) {
         console.error(`❌ OneSignal API validation error for action ${action.action_id}:`, error.body);
-        console.error(`   Player ID: ${playerId}`);
+        console.error(`   Company ID: ${companyId}`);
         console.error(`   User ID: ${userId}`);
       } else if (error.statusCode === 401) {
         console.error(`❌ OneSignal API authentication error for action ${action.action_id}: Check API key`);
@@ -623,58 +598,8 @@ class AIActionsServer {
       }
     });
 
-    // Register OneSignal player ID
-    this.app.post('/api/register-onesignal', async (req, res) => {
-      try {
-        const authHeader = req.headers.authorization;
-        
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return res.status(401).json({ message: 'No token provided' });
-        }
-
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const userId = decoded.userId;
-        
-        const { playerId } = req.body;
-        
-        if (!playerId) {
-          return res.status(400).json({ success: false, error: 'Player ID is required' });
-        }
-
-        // Validate OneSignal push subscription ID format (UUID preferred, device tokens temporarily allowed)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
-        
-        if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
-          console.log(`❌ Invalid OneSignal ID format for user ${userId}: ${playerId}`);
-          return res.status(400).json({ 
-            success: false, 
-            error: 'Invalid OneSignal ID format. Must be a valid UUID (push subscription ID) or 64-character hex device token.' 
-          });
-        }
-        
-        if (deviceTokenRegex.test(playerId)) {
-          console.log(`⚠️ TEMPORARY: Accepting device token for user ${userId} (this will cause notification failures)`);
-          console.log(`⚠️ Device token: ${playerId.substring(0, 16)}...`);
-        }
-
-        // Update user's OneSignal push subscription ID
-        await this.db.query(
-          'UPDATE users SET onesignal_player_id = $1 WHERE id = $2',
-          [playerId, userId]
-        );
-        
-        console.log(`🗑️ Cleared old OneSignal registration for user ${userId} and registered new push subscription ID: ${playerId}`);
-
-        console.log(`✅ OneSignal push subscription ID registered for user ${userId}: ${playerId}`);
-        
-        res.json({ success: true, message: 'OneSignal push subscription ID registered successfully' });
-      } catch (error) {
-        console.error('Error registering OneSignal push subscription ID:', error);
-        res.status(500).json({ success: false, error: 'Failed to register OneSignal push subscription ID' });
-      }
-    });
+    // OneSignal registration is no longer needed - using company-based targeting
+    // All users in the company (juta_actions_company) will receive notifications
 
     // Approve an action
     this.app.post('/api/actions/:actionId/approve', async (req, res) => {
