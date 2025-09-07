@@ -25,8 +25,9 @@ class AIActionsServer {
     this.server = http.createServer(this.app);
     this.io = new Server(this.server, {
       cors: {
-        origin: "http://localhost:3002",
-        methods: ["GET", "POST"]
+        origin: "https://app.jutateknologi.com",
+        methods: ["GET", "POST"],
+        credentials: true
       }
     });
     
@@ -342,7 +343,11 @@ class AIActionsServer {
   }
 
   setupExpress() {
-    this.app.use(cors());
+    this.app.use(cors({
+      origin: "https://app.jutateknologi.com",
+      methods: ["GET", "POST", "PUT", "DELETE"],
+      credentials: true
+    }));
     this.app.use(express.json());
     
     // Get authorized phone numbers (for frontend validation)
