@@ -310,7 +310,7 @@ class AIActionsServer {
     try {
       // Use company-based targeting instead of individual player IDs
       // This matches how juta_app works - target all users in the company
-      const companyId = 'juta_actions_company';
+      const companyId = '1';
       
       console.log(`📱 Sending OneSignal notification to company: ${companyId} for action ${action.action_id}`);
       
@@ -566,6 +566,44 @@ class AIActionsServer {
       }
     });
 
+    // Update OneSignal player ID for authenticated user
+    this.app.post('/api/onesignal/player-id', async (req, res) => {
+      try {
+        const authHeader = req.headers.authorization;
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).json({ message: 'No token provided' });
+        }
+
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const userId = decoded.userId;
+        
+        const { playerId } = req.body;
+        
+        if (!playerId) {
+          return res.status(400).json({ message: 'Player ID is required' });
+        }
+
+        // Update user's OneSignal player ID
+        await this.db.query(
+          'UPDATE users SET onesignal_player_id = $1, updated_at = NOW() WHERE id = $2',
+          [playerId, userId]
+        );
+
+        console.log(`✅ OneSignal player ID updated for user ${userId}: ${playerId}`);
+        
+        res.json({ 
+          success: true, 
+          message: 'OneSignal player ID updated successfully',
+          playerId: playerId
+        });
+      } catch (error) {
+        console.error('Error updating OneSignal player ID:', error);
+        res.status(500).json({ message: 'Failed to update OneSignal player ID' });
+      }
+    });
+    
     // Get all pending actions for authenticated user
     this.app.get('/api/actions', async (req, res) => {
       try {
@@ -599,7 +637,7 @@ class AIActionsServer {
     });
 
     // OneSignal registration is no longer needed - using company-based targeting
-    // All users in the company (juta_actions_company) will receive notifications
+    // All users in the company (1) will receive notifications
 
     // Approve an action
     this.app.post('/api/actions/:actionId/approve', async (req, res) => {
