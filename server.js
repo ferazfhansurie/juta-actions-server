@@ -322,17 +322,23 @@ class AIActionsServer {
 
       const playerId = userResult.rows[0].onesignal_player_id;
       
-      // Validate OneSignal push subscription ID format (UUID only - device tokens are deprecated)
+      // Validate OneSignal ID format (UUID preferred, device tokens temporarily allowed)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
       
-      if (!uuidRegex.test(playerId)) {
-        console.log(`❌ Invalid OneSignal push subscription ID format for user ${userId}: ${playerId}`);
-        console.log(`📱 Expected UUID format for push subscription ID`);
-        await this.sendFallbackNotification(action, userId, `Invalid push subscription ID format: ${playerId}`);
+      if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
+        console.log(`❌ Invalid OneSignal ID format for user ${userId}: ${playerId}`);
+        console.log(`📱 Expected UUID format for push subscription ID or 64-char hex device token`);
+        await this.sendFallbackNotification(action, userId, `Invalid OneSignal ID format: ${playerId}`);
         return;
       }
       
-      console.log(`📱 Using push subscription ID for OneSignal notification for user ${userId}: ${playerId}`);
+      if (uuidRegex.test(playerId)) {
+        console.log(`📱 Using push subscription ID for OneSignal notification for user ${userId}: ${playerId}`);
+      } else if (deviceTokenRegex.test(playerId)) {
+        console.log(`⚠️ TEMPORARY: Using device token for OneSignal notification for user ${userId} (this will fail)`);
+        console.log(`⚠️ Device token: ${playerId.substring(0, 16)}...`);
+      }
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
@@ -636,15 +642,21 @@ class AIActionsServer {
           return res.status(400).json({ success: false, error: 'Player ID is required' });
         }
 
-        // Validate OneSignal push subscription ID format (UUID only - device tokens are deprecated)
+        // Validate OneSignal push subscription ID format (UUID preferred, device tokens temporarily allowed)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const deviceTokenRegex = /^[0-9a-f]{64}$/i; // 64-character hex string for iOS device tokens
         
-        if (!uuidRegex.test(playerId)) {
-          console.log(`❌ Invalid OneSignal push subscription ID format for user ${userId}: ${playerId}`);
+        if (!uuidRegex.test(playerId) && !deviceTokenRegex.test(playerId)) {
+          console.log(`❌ Invalid OneSignal ID format for user ${userId}: ${playerId}`);
           return res.status(400).json({ 
             success: false, 
-            error: 'Invalid push subscription ID format. OneSignal push subscription ID must be a valid UUID format.' 
+            error: 'Invalid OneSignal ID format. Must be a valid UUID (push subscription ID) or 64-character hex device token.' 
           });
+        }
+        
+        if (deviceTokenRegex.test(playerId)) {
+          console.log(`⚠️ TEMPORARY: Accepting device token for user ${userId} (this will cause notification failures)`);
+          console.log(`⚠️ Device token: ${playerId.substring(0, 16)}...`);
         }
 
         // Update user's OneSignal push subscription ID
@@ -652,6 +664,8 @@ class AIActionsServer {
           'UPDATE users SET onesignal_player_id = $1 WHERE id = $2',
           [playerId, userId]
         );
+        
+        console.log(`🗑️ Cleared old OneSignal registration for user ${userId} and registered new push subscription ID: ${playerId}`);
 
         console.log(`✅ OneSignal push subscription ID registered for user ${userId}: ${playerId}`);
         
