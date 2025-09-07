@@ -18,6 +18,7 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.294.0",
     "openai": "^4.28.4",
+    "onesignal-node": "^3.2.0",
     "pg": "^8.16.3",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",

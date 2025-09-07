@@ -2,6 +2,7 @@ class MessageGrouper {
   constructor(aiProcessor, db) {
     this.aiProcessor = aiProcessor;
     this.db = db;
+    this.oneSignalClient = null;
     this.messageBuffer = new Map(); // userId -> Map(chatId -> messages[])
     this.processingTimers = new Map(); // userId-chatId -> timer
     this.conversationHistory = new Map(); // userId-chatId -> actions history
@@ -15,6 +16,55 @@ class MessageGrouper {
     this.DUPLICATE_SIMILARITY_THRESHOLD = 0.8; // Similarity threshold for duplicate detection
     this.GROUP_TOPIC_SIMILARITY_THRESHOLD = 0.7; // Similarity threshold for group topic detection
     this.GROUP_TOPIC_TIMEOUT_HOURS = 6; // How long to track group topics
+  }
+
+  setOneSignalClient(oneSignalClient) {
+    this.oneSignalClient = oneSignalClient;
+  }
+
+  // Send OneSignal notification for new action
+  async sendActionNotification(action, userId) {
+    try {
+      if (!this.oneSignalClient) {
+        console.log('OneSignal client not available');
+        return;
+      }
+
+      // Get user's OneSignal player ID from database
+      const userResult = await this.db.query(
+        'SELECT onesignal_player_id FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
+        console.log(`No OneSignal player ID found for user ${userId}`);
+        return;
+      }
+
+      const playerId = userResult.rows[0].onesignal_player_id;
+      
+      const notification = {
+        app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
+        include_player_ids: [playerId],
+        headings: {
+          en: '🎯 New Action Created!'
+        },
+        contents: {
+          en: `${action.type}: ${action.description}`
+        },
+        data: {
+          actionId: action.actionId,
+          actionType: action.type,
+          userId: userId
+        },
+        url: 'juta-actions://action/' + action.actionId
+      };
+
+      const response = await this.oneSignalClient.createNotification(notification);
+      console.log(`✅ OneSignal notification sent for action ${action.actionId}:`, response);
+    } catch (error) {
+      console.error(`❌ Failed to send OneSignal notification for action ${action.actionId}:`, error);
+    }
   }
 
   async processMessage(messageData, userId, emitToUser) {
@@ -473,6 +523,9 @@ class MessageGrouper {
       } else {
         console.warn('Database connection not available, action not saved to database');
       }
+      
+      // Send OneSignal notification
+      await this.sendActionNotification(actionWithId, userId);
       
       // Send to frontend (this should work even without database)
       emitToUser(userId, 'newAction', {

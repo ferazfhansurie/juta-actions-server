@@ -566,6 +566,14 @@ class SessionManager {
     this.io = io;
     this.userSockets = userSockets;
   }
+
+  setOneSignalClient(oneSignalClient) {
+    this.oneSignalClient = oneSignalClient;
+    // Pass OneSignal client to messageGrouper
+    if (this.messageGrouper) {
+      this.messageGrouper.setOneSignalClient(oneSignalClient);
+    }
+  }
 }
 
 module.exports = SessionManager;

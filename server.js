@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const OneSignal = require('onesignal-node');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // Set Chrome path for macOS
@@ -47,10 +48,17 @@ class AIActionsServer {
     this.internalItemsCRUD = new InternalItemsCRUD(this.db);
     this.dashboardManager = new DashboardManager(this.db, this.internalItemsCRUD);
 
+    // Initialize OneSignal
+    this.oneSignalClient = new OneSignal.Client(
+      process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
+      process.env.ONESIGNAL_API_KEY || 'YOUR_ONESIGNAL_API_KEY'
+    );
+
     this.setupExpress();
     this.setupSocketIO();
-    // Initialize session manager with socket.io
+    // Initialize session manager with socket.io and OneSignal client
     this.sessionManager.setSocketIO(this.io, this.userSockets);
+    this.sessionManager.setOneSignalClient(this.oneSignalClient);
     
     // Initialize database and then existing sessions
     this.initializeDatabase().then(async () => {
@@ -297,6 +305,46 @@ class AIActionsServer {
     return `${action.type}:${normalizedDescription}:${messageBody}`;
   }
 
+  // Send OneSignal notification for new action
+  async sendActionNotification(action, userId) {
+    try {
+      // Get user's OneSignal player ID from database
+      const userResult = await this.db.query(
+        'SELECT onesignal_player_id FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
+        console.log(`No OneSignal player ID found for user ${userId}`);
+        return;
+      }
+
+      const playerId = userResult.rows[0].onesignal_player_id;
+      
+      const notification = {
+        app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
+        include_player_ids: [playerId],
+        headings: {
+          en: '🎯 New Action Created!'
+        },
+        contents: {
+          en: `${action.type}: ${action.description}`
+        },
+        data: {
+          actionId: action.action_id,
+          actionType: action.type,
+          userId: userId
+        },
+        url: 'juta-actions://action/' + action.action_id
+      };
+
+      const response = await this.oneSignalClient.createNotification(notification);
+      console.log(`✅ OneSignal notification sent for action ${action.action_id}:`, response);
+    } catch (error) {
+      console.error(`❌ Failed to send OneSignal notification for action ${action.action_id}:`, error);
+    }
+  }
+
   async initializeDatabase() {
     try {
       // Create users table if it doesn't exist
@@ -318,6 +366,7 @@ class AIActionsServer {
         await this.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false`);
         await this.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
         await this.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`);
+        await this.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onesignal_player_id VARCHAR(255)`);
         console.log('Added missing columns to users table');
       } catch (error) {
         console.log('Columns already exist or error adding them:', error.message);
@@ -477,13 +526,51 @@ class AIActionsServer {
           ['pending', userId]
         );
         
+        console.log(`🔍 API /actions: Found ${result.rows.length} actions in database for user ${userId}`);
+        
         // Deduplicate actions before sending to frontend
         const deduplicatedActions = this.deduplicateActions(result.rows);
+        
+        console.log(`📤 API /actions: Sending ${deduplicatedActions.length} deduplicated actions to frontend`);
         
         res.json({ success: true, actions: deduplicatedActions });
       } catch (error) {
         console.error('Error fetching actions:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch actions' });
+      }
+    });
+
+    // Register OneSignal player ID
+    this.app.post('/api/register-onesignal', async (req, res) => {
+      try {
+        const authHeader = req.headers.authorization;
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).json({ message: 'No token provided' });
+        }
+
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const userId = decoded.userId;
+        
+        const { playerId } = req.body;
+        
+        if (!playerId) {
+          return res.status(400).json({ success: false, error: 'Player ID is required' });
+        }
+
+        // Update user's OneSignal player ID
+        await this.db.query(
+          'UPDATE users SET onesignal_player_id = $1 WHERE id = $2',
+          [playerId, userId]
+        );
+
+        console.log(`✅ OneSignal player ID registered for user ${userId}: ${playerId}`);
+        
+        res.json({ success: true, message: 'OneSignal player ID registered successfully' });
+      } catch (error) {
+        console.error('Error registering OneSignal player ID:', error);
+        res.status(500).json({ success: false, error: 'Failed to register OneSignal player ID' });
       }
     });
 
@@ -1311,6 +1398,9 @@ class AIActionsServer {
               createdActions.push(actionRecord.rows[0]);
               console.log(`✅ AI Action created from brain dump: ${actionResult.type} - ${actionResult.description}`);
               
+              // Send OneSignal notification
+              await this.sendActionNotification(actionRecord.rows[0], authenticatedUserId);
+              
               // Emit to frontend
               if (this.userSockets.has(authenticatedUserId)) {
                 this.userSockets.get(authenticatedUserId).emit('newAction', actionRecord.rows[0]);
@@ -1429,6 +1519,8 @@ class AIActionsServer {
         // Deduplicate actions before sending to frontend
         const deduplicatedActions = this.deduplicateActions(result.rows);
         
+        console.log(`🔔 Socket connection: Sending ${deduplicatedActions.length} actions to user ${userId}`);
+        
         for (const action of deduplicatedActions) {
           let originalMessage;
           try {
@@ -1441,6 +1533,7 @@ class AIActionsServer {
             originalMessage = action.original_message || {};
           }
           
+          console.log(`📤 Socket emitting action: ${action.action_id} - ${action.type}: ${action.description}`);
           socket.emit('newAction', {
             actionId: action.action_id,
             type: action.type,
