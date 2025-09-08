@@ -327,10 +327,10 @@ class AIActionsServer {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
         included_segments: ["All"], // Send to all subscribed users
         headings: {
-          en: '🎯 New Action Created!'
+          en: '🤖 AI Suggestion - Approval Needed'
         },
         contents: {
-          en: `${action.type}: ${action.description}`
+          en: `${action.type}: ${action.description} - Tap to approve or reject`
         },
         data: {
           actionId: action.action_id,
