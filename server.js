@@ -603,6 +603,58 @@ class AIActionsServer {
         res.status(500).json({ message: 'Failed to update OneSignal player ID' });
       }
     });
+
+    // Test OneSignal notification endpoint (no auth required for testing)
+    this.app.post('/api/onesignal/test', async (req, res) => {
+      try {
+        // For testing purposes, use user ID 1 directly
+        const userId = 1;
+
+        // Get user's OneSignal player ID
+        const userResult = await this.db.query(
+          'SELECT onesignal_player_id FROM users WHERE id = $1',
+          [userId]
+        );
+
+        if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
+          return res.status(404).json({ 
+            success: false, 
+            message: `No OneSignal player ID found for user ${userId}` 
+          });
+        }
+
+        const playerId = userResult.rows[0].onesignal_player_id;
+        
+        // Send test notification to all users (for testing)
+        const notification = {
+          app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
+          included_segments: ["All"], // Send to all users
+          headings: {
+            en: '🎯 Test Notification!'
+          },
+          contents: {
+            en: 'This is a test notification from Juta Actions!'
+          },
+          data: {
+            test: true,
+            userId: userId
+          }
+        };
+
+        const response = await this.oneSignalClient.createNotification(notification);
+        console.log(`✅ Test notification sent for user ${userId}:`, response);
+        
+        res.json({ 
+          success: true, 
+          message: 'Test notification sent successfully',
+          playerId: playerId,
+          response: response
+        });
+      } catch (error) {
+        console.error('Error sending test notification:', error);
+        res.status(500).json({ message: 'Failed to send test notification', error: error.message });
+      }
+    });
     
     // Get all pending actions for authenticated user
     this.app.get('/api/actions', async (req, res) => {

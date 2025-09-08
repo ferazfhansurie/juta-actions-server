@@ -45,7 +45,7 @@ class MessageGrouper {
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-        include_player_ids: [playerId],
+        include_external_user_ids: [userId.toString()], // Use user ID as external user ID
         headings: {
           en: '🎯 New Action Created!'
         },
