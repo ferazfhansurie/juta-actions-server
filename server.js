@@ -345,10 +345,10 @@ class AIActionsServer {
       const playerId = userResult.rows[0].onesignal_player_id;
       console.log(`📱 Sending OneSignal notification to player ID: ${playerId} for action ${action.action_id}`);
       
-      // Use external user ID targeting (the OneSignal user ID should be set as external user ID)
+      // Use player ID targeting (more reliable than external user ID)
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-        include_external_user_ids: [playerId], // Use player ID as external user ID
+        include_player_ids: [playerId], // Use OneSignal player ID for direct targeting
         headings: {
           en: '🎯 New Action Created!'
         },
@@ -638,28 +638,38 @@ class AIActionsServer {
     // Test OneSignal notification endpoint (no auth required for testing)
     this.app.post('/api/onesignal/test', async (req, res) => {
       try {
-        // For testing purposes, use user ID 1 directly
-        const userId = 1;
+        // Check if custom player ID is provided in request body
+        const customPlayerId = req.body.playerId;
+        let playerId;
 
-        // Get user's OneSignal player ID
-        const userResult = await this.db.query(
-          'SELECT onesignal_player_id FROM users WHERE id = $1',
-          [userId]
-        );
+        if (customPlayerId) {
+          // Use the custom player ID provided
+          playerId = customPlayerId;
+          console.log(`🧪 Using custom player ID for test: ${playerId}`);
+        } else {
+          // For testing purposes, use user ID 1 directly
+          const userId = 1;
 
-        if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
-          return res.status(404).json({ 
-            success: false, 
-            message: `No OneSignal player ID found for user ${userId}` 
-          });
+          // Get user's OneSignal player ID
+          const userResult = await this.db.query(
+            'SELECT onesignal_player_id FROM users WHERE id = $1',
+            [userId]
+          );
+
+          if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
+            return res.status(404).json({ 
+              success: false, 
+              message: `No OneSignal player ID found for user ${userId}` 
+            });
+          }
+
+          playerId = userResult.rows[0].onesignal_player_id;
         }
-
-        const playerId = userResult.rows[0].onesignal_player_id;
         
-        // Send test notification to all users (for testing)
+        // Send test notification to specific player ID
         const notification = {
           app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-          included_segments: ["All"], // Send to all users
+          include_player_ids: [playerId], // Send to specific player ID
           headings: {
             en: '🎯 Test Notification!'
           },
@@ -668,12 +678,12 @@ class AIActionsServer {
           },
           data: {
             test: true,
-            userId: userId
+            playerId: playerId
           }
         };
 
         const response = await this.oneSignalClient.createNotification(notification);
-        console.log(`✅ Test notification sent for user ${userId}:`, response);
+        console.log(`✅ Test notification sent to player ID ${playerId}:`, response);
         
         res.json({ 
           success: true, 
