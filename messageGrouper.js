@@ -45,7 +45,7 @@ class MessageGrouper {
       
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-        include_external_user_ids: [userId.toString()], // Use user ID as external user ID
+        included_segments: ["All"], // Send to all subscribed users
         headings: {
           en: '🎯 New Action Created!'
         },
@@ -55,7 +55,8 @@ class MessageGrouper {
         data: {
           actionId: action.actionId,
           actionType: action.type,
-          userId: userId
+          userId: userId,
+          targetPlayerId: playerId // Include for reference
         },
         url: 'juta-actions://action/' + action.actionId
       };
