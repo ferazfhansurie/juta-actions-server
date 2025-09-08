@@ -315,30 +315,7 @@ class AIActionsServer {
       );
 
       if (userResult.rows.length === 0 || !userResult.rows[0].onesignal_player_id) {
-        console.log(`⚠️ No OneSignal player ID found for user ${userId}, trying external user ID approach`);
-        
-        // Fallback to external user ID approach - use the OneSignal user ID as external ID
-        // The external user ID should be set to the OneSignal user ID
-        const oneSignalUserId = userResult.rows[0].onesignal_player_id || '1'; // fallback to company ID
-        const notification = {
-          app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-          include_external_user_ids: [oneSignalUserId],
-          headings: {
-            en: '🎯 New Action Created!'
-          },
-          contents: {
-            en: `${action.type}: ${action.description}`
-          },
-          data: {
-            actionId: action.action_id,
-            actionType: action.type,
-            userId: userId
-          },
-          url: 'juta-actions://action/' + action.action_id
-        };
-
-        const response = await this.oneSignalClient.createNotification(notification);
-        console.log(`✅ OneSignal notification sent for action ${action.action_id} (external user ID):`, response);
+        console.log(`⚠️ No OneSignal player ID found for user ${userId}`);
         return;
       }
 
