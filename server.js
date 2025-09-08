@@ -666,10 +666,10 @@ class AIActionsServer {
           playerId = userResult.rows[0].onesignal_player_id;
         }
         
-        // Send test notification to specific player ID
+        // Send test notification to all users
         const notification = {
           app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-          include_player_ids: [playerId], // Send to specific player ID
+          included_segments: ["All"], // Send to all users
           headings: {
             en: '🎯 Test Notification!'
           },
