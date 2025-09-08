@@ -322,10 +322,10 @@ class AIActionsServer {
       const playerId = userResult.rows[0].onesignal_player_id;
       console.log(`📱 Sending OneSignal notification to player ID: ${playerId} for action ${action.action_id}`);
       
-      // Use player ID targeting (more reliable than external user ID)
+      // Use "All" segment targeting (more reliable than specific player IDs)
       const notification = {
         app_id: process.env.ONESIGNAL_APP_ID || '301d5b91-3055-4b33-8b34-902e885277f1',
-        include_player_ids: [playerId], // Use OneSignal player ID for direct targeting
+        included_segments: ["All"], // Send to all subscribed users
         headings: {
           en: '🎯 New Action Created!'
         },
@@ -335,7 +335,8 @@ class AIActionsServer {
         data: {
           actionId: action.action_id,
           actionType: action.type,
-          userId: userId
+          userId: userId,
+          targetPlayerId: playerId // Include for reference
         },
         url: 'juta-actions://action/' + action.action_id
       };
